@@ -4,7 +4,7 @@ brick_from_path <- function(rasters_path,
   rasters <- list.files(rasters_path,
                         pattern=pattern,
                         full.names = TRUE)
-  brik <- brick(title = "Ejemplo pipeline")
+  brik <- brick()
   for (i in 1:length(rasters))
   {
     brik<-addLayer(brik,raster(rasters[i]))
