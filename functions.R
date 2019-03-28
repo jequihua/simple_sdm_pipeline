@@ -80,3 +80,35 @@ calc_sample_size <- function(species_vector,proportion=0.7){
   return(sample_size)
 }
 
+brik_table_add_sp_abs  <- function(brik, cell_ids)
+{
+  brik_table <- data.frame(rasterToPoints(brik))
+  brik_table <- brik_table[complete.cases(brik_table), ]
+  brik_table$sp <- NA
+  brik_table$sp[brik_table$id %in% cell_ids] <- 1
+  brik_table$sp <- add_pseudoabsence(brik_table, 3000)
+  return(brik_table)
+  #brik_table$id <- NA,
+}
+
+analisis  <- function(table)
+{
+  train_table <- table[!is.na(table$sp),]
+  sampsize <- calc_sample_size(train_table$sp)
+  rf_model <- randomForest(y=as.factor(train_table$sp),
+                           x=train_table[3:(ncol(train_table)-1)],
+                           sampsize = c(sampsize, sampsize))
+  sdm_prediction <- predict(rf_model, brik_table[3:(ncol(brik_table)-1)],
+                            type="prob")
+  return(sdm_prediction)
+}
+
+
+resultados  <- function(brk, brk_t, prediction, gbif)
+{
+  output_df <- data.frame(x=brk_t$x, y=brk_t$y, sdm_prob=prediction[,2])
+  output_raster <- raster_from_points(output_df, projection(brk))
+  writeOGR(gbif, "sp_points.shp", "sp_points", 
+           driver="ESRI Shapefile", overwrite_layer = TRUE)
+  writeRaster(output_raster, filename="sdm.tif", format="GTiff", overwrite=TRUE)
+}
