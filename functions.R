@@ -7,11 +7,10 @@ brick_from_path <- function(rasters_path,
   brik <- brick()
   for (i in 1:length(rasters))
   {
-    brik<-addLayer(brik,raster(rasters[i]))
+    brik<-addLayer(brik, raster(rasters[i]))
   }
   return(brik)
 }
-
 
 bbox_from_raster <- function(rast){
   bbox <- gbif_bbox2wkt(minx = xmin(rast),
