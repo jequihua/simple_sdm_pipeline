@@ -4,20 +4,38 @@ brick_from_path <- function(rasters_path,
   rasters <- list.files(rasters_path,
                         pattern=pattern,
                         full.names = TRUE)
-  brik <- brick()
+  .brik <- brick()
   for (i in 1:length(rasters))
   {
-    brik<-addLayer(brik, raster(rasters[i]))
+    .brik<-addLayer(brik, raster(rasters[i]))
   }
-  return(brik)
+  return(.brik)
 }
 
-bbox_from_raster <- function(rast){
-  bbox <- gbif_bbox2wkt(minx = xmin(rast),
-                        miny = ymin(rast),
-                        maxx = xmax(rast),
-                        maxy = ymax(rast))
-  return(bbox)
+
+datos_sp <- function(sp = "Panthera onca", rast)
+{
+    bbox <- gbif_bbox2wkt(minx = xmin(rast),
+                          miny = ymin(rast),
+                          maxx = xmax(rast),
+                          maxy = ymax(rast))
+
+    layer <- subset(rast, subset=1)
+    data_table <- data.frame(rasterToPoints(layer))
+    data_table$id <- NA
+    gc()
+    data_table$id <- 1:length(data_table$id)
+    brik_cellids <- raster_from_points(data_table[, c(1, 2, 4, 3)], projection(layer))
+    gbif_query <- occ_search(scientificName =sp,
+                             geometry=bbox,
+                             eventDate="2000,2019",
+                             hasCoordinate = TRUE,
+                             hasGeospatialIssue = FALSE)
+    rast <- addLayer(rast, harmonize(brik_cellids, rast))
+    gbif_points <- records_to_spatial(gbif_query, projection(rast))
+    gbif_points_cellids <- extract_unique(brik_cellids, gbif_points)
+    brik_table <- brik_table_add_sp_abs(rast, gbif_points_cellids)
+    return(list(rast, brik_table, gbif_points))
 }
 
 
@@ -27,16 +45,6 @@ raster_from_points <- function(xydf, proj){
   xydf <- raster(xydf)
   projection(xydf) <- proj
   return(xydf)
-}
-
-
-build_cellids <- function(rast){
-  layer <- subset(rast, subset=1)
-  data_table <- data.frame(rasterToPoints(layer))
-  data_table$id <- NA
-  gc()
-  data_table$id <- 1:length(data_table$id)
-  rast <- raster_from_points(data_table[, c(1, 2, 4, 3)], projection(layer))
 }
 
 
@@ -97,17 +105,17 @@ analisis  <- function(table)
   rf_model <- randomForest(y=as.factor(train_table$sp),
                            x=train_table[3:(ncol(train_table)-1)],
                            sampsize = c(sampsize, sampsize))
-  sdm_prediction <- predict(rf_model, brik_table[3:(ncol(brik_table)-1)],
+  sdm_prediction <- predict(rf_model, table[3:(ncol(table)-1)],
                             type="prob")
   return(sdm_prediction)
 }
 
 
-resultados  <- function(brk, brk_t, prediction, gbif)
+resultados  <- function(data_set, prediction)
 {
-  output_df <- data.frame(x=brk_t$x, y=brk_t$y, sdm_prob=prediction[,2])
-  output_raster <- raster_from_points(output_df, projection(brk))
-  writeOGR(gbif, "sp_points.shp", "sp_points", 
-           driver="ESRI Shapefile", overwrite_layer = TRUE)
+  output_df <- data.frame(x=data_set[[2]]$x, y=data_set[[2]]$y, sdm_prob=prediction[,2])
+  output_raster <- raster_from_points(output_df, projection(data_set[[1]]))
+  writeOGR(data_set[[3]], "sp_points.shp", "sp_points", driver="ESRI Shapefile", 
+           overwrite_layer = TRUE)
   writeRaster(output_raster, filename="sdm.tif", format="GTiff", overwrite=TRUE)
 }
